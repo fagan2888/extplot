@@ -1,23 +1,38 @@
-import forgi.utilities.debug as fud
-
-import math
 import numpy as np
 import scipy.stats as ss
-import sys
 from mpl_toolkits.mplot3d import Axes3D
 
 import matplotlib.pyplot as plt
 
-#f = calc_prob
-#vertices, triangles = mcubes.marching_cubes_func((0.,0.,0.),(30,3.14,3.14),5,5,5,f, 0.95)
-def plot_probs(Wx,X,Y,Z, cutoff, resolution, ax=None, color='b', alpha=1.0, 
+def plot_3d_probs(Wx,X,Y,Z, cutoff, resolution, ax=None, color='b', alpha=1.0, 
                xlim=None, ylim=None, zlim=None):
+    '''
+    Create a 3D plot showing an isosurface for a probability value of 'cutoff'
+
+    The vertices of the polygons are generated using the Marching Cubes algorithm
+    as implemented in the PyMCubes library:
+
+        https://github.com/pmneila/PyMCubes
+
+    :param Wx: The probability values on a grid.
+    :param X: The X grid (generated using meshgrid)
+    :param Y: The Y grid (generated using meshgrid)
+    :param Z: The Z grid (generated using meshgrid)
+    :param cutoff: The cutoff value for the isosurface.
+    :param resolution: The width, height and length of the grid (as a single scalar value)
+    :param ax: An axis object. If None, then we create our own
+    :param color: The color for the surface
+    :param alpha: How transparent the surface should be
+    :param xlim: The limits of the x-axis (and data)
+    :param ylim: The limits of the y-axis (and data)
+    :param zlim: The limits of the z-axis (and data)
+    '''
     import mcubes
     vertices, triangles = mcubes.marching_cubes(Wx, cutoff)
 
-    scaled_vertices = np.array([(xlim[1] - xlim[0]) * vertices[:,0] / resolution, 
-                            (ylim[1] - ylim[0]) * vertices[:,1] / resolution, 
-                            (zlim[1] - zlim[0]) * vertices[:,2] / resolution]).T
+    scaled_vertices = np.array([xlim[0] + (xlim[1] - xlim[0]) * vertices[:,0] / resolution, 
+                            ylim[0] + (ylim[1] - ylim[0]) * vertices[:,1] / resolution, 
+                            zlim[0] + (zlim[1] - zlim[0]) * vertices[:,2] / resolution]).T
     verts = [[scaled_vertices[i] for i in t] for t in triangles]
 
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -45,6 +60,18 @@ def plot_probs(Wx,X,Y,Z, cutoff, resolution, ax=None, color='b', alpha=1.0,
 def plot_2d_probsurface(data, resolution=20, ax = None, 
                         xlim=None, ylim=None, kde=None,
                         zdir='', offset=0):
+    '''
+    Plot a 2D probability surface on a 3D plot.
+
+    :param data: A 2D numpy array.
+    :param resolution: The width, height and length of the grid (as one scalar value)
+    :param ax: The axis object
+    :param xlim: The limits of the x-axis
+    :param ylim: The limits of the y-axis
+    :param kde: The kernel density estimate of the data. If None, then generate it automatically from the passed data
+    :param zdir: The location of the z-axis ('x', 'y', or 'z')
+    :param offset: Where to draw the contours along the z-axis
+    '''
     if kde is None:
         # create a function to calcualte the density at a particular location
         kde = ss.gaussian_kde(data.T)
@@ -103,6 +130,21 @@ def plot_2d_probsurface(data, resolution=20, ax = None,
 
 
 def plot_3d_and_2d_distribution(data, resolution=20, ax = None, color='b', filename=None, title=None, xlim=None, ylim=None, zlim=None, cutoff=None):
+    '''
+    Draw both an isosurface as well as the corresponding 2D contour plots all in one go.
+    
+    :param data: A 3D numpy array of data points.
+    :param resolution: The number of points in each dimension of the grid.
+    :param ax: An axis object to plot to
+    :param color: The color to draw the isosurface in
+    :param filename: A filename to store this graph to
+    :param title: The title of this graph
+    :param xlim: The limits of the x-axis
+    :param ylim: The limits of the y-axis
+    :param zlim: The limits of the z-axis
+    :param cutoff: The probability value along which to draw the isosurface
+    '''
+
     #sub_data = data[:,cols]
     prob = ss.gaussian_kde(data.T)
     
@@ -129,7 +171,7 @@ def plot_3d_and_2d_distribution(data, resolution=20, ax = None, color='b', filen
     W = calc_all_prob(X,Y,Z)
 
     if cutoff is None:
-        cutoff = np.median(W.flatten())
+        cutoff = np.mean(W.flatten())
     
     fig = None
     if ax is None:
@@ -137,7 +179,7 @@ def plot_3d_and_2d_distribution(data, resolution=20, ax = None, color='b', filen
         ax = Axes3D(fig)
         
     #print W
-    ax = plot_probs(W,X,Y,Z,cutoff, resolution, ax=ax, alpha=0.4, color=color, 
+    ax = plot_3d_probs(W,X,Y,Z,cutoff, resolution, ax=ax, alpha=0.4, color=color, 
                     xlim=xlim, ylim=ylim, zlim=zlim)
     
     '''
@@ -155,8 +197,6 @@ def plot_3d_and_2d_distribution(data, resolution=20, ax = None, color='b', filen
     for cols, zdir,offset, plot_xlim, plot_ylim in [((0,1), 'z', xlim[0], xlim, ylim), 
                               ((0,2), 'y', zlim[1], xlim, zlim), 
                               ((1,2), 'x', ylim[0], ylim, zlim)]:
-        fud.pv('plot_xlim')
-        fud.pv('plot_ylim')
         pl = plot_2d_probsurface(data[:,cols], xlim =plot_xlim, ylim=plot_ylim, ax = ax, 
                             zdir=zdir, offset=offset, resolution=resolution)
         
@@ -175,6 +215,19 @@ def plot_3d_and_2d_distribution(data, resolution=20, ax = None, color='b', filen
     return {"xlab": None, "ylab": None, "contour": pl['contour'], 'fig': fig, 'ax': ax}
 
 def plot_3d_and_2d_distdiff(data1, data2, resolution=20, ax = None, color='b', cutoff=0.008, filename=None, title=None):
+    '''
+    Plot the difference between two density distributions. If probability density of the
+    datasets is W1 and W2, respectively, the the plotted data will be W1 / (W1 + W2)
+
+    :param data1: A 3D dataset
+    :param data2: A 3D dataset
+    :param resolution: The width of the grid
+    :param ax: An axis object to plot to. A new one is created if this is passed as null.
+    :param color: The color of the isosurface
+    :param cutoff: The probability value along which to draw the isosurface
+    :param filename: A filename to save the plot to
+    :param title: The title of the plot
+    '''
     #sub_data = data[:,cols]
     prob1 = ss.gaussian_kde(data1.T)
     prob2 = ss.gaussian_kde(data2.T)
@@ -203,20 +256,8 @@ def plot_3d_and_2d_distdiff(data1, data2, resolution=20, ax = None, color='b', c
         ax = Axes3D(fig)
         
     #print W
-    ax = plot_probs(W,X,Y,Z,cutoff, resolution, ax=ax, alpha=0.4, color=color)
+    plot_probs(W,X,Y,Z,cutoff, resolution, ax=ax, alpha=0.4, color=color)
     
-    '''
-    if sorted(cols) == [0,1]:
-        zdir = 'z'
-    elif sorted(cols) == [0,2]:
-        zdir = 'y'
-    elif sorted(cols) == [1,2]:
-        zdir = 'x'
-    else:
-        print >>sys.stderr, "Z-direction undefined, cols:", sorted(cols)
-        return
-    '''
-        
     for cols, zdir,offset, xlim, ylim in [((0,1), 'z', 0, (0, 30), (0,3.14)), 
                               ((0,2), 'y', 3.14, (0, 30), (0,3.14)), 
                               ((1,2), 'x', 0, (0, 3.14), (0,3.14))]:
@@ -243,53 +284,3 @@ def plot_3d_and_2d_distdiff(data1, data2, resolution=20, ax = None, color='b', c
         
     return {"xlab": None, "ylab": None, "contour": pl['contour'], 'fig': fig, 'ax': ax}
 
-def plot_multiple(plot_function, args, filename=None, figsize=(14,9), label_left = "Density", 
-                  label_bottom="Coarse Grain Measure Value", label_right="Energy", 
-                  legend_pos=(1.40,0.90), legend_labels=None):
-    
-    fig = plt.figure(figsize=figsize)
-    #figure(num=None, figsize=(8, 6), dpi=80, facecolor='w', edgecolor='k')
-    num_structs = len(args)
-    rows = int(1.5 * math.sqrt(num_structs))
-    cols = int(math.ceil(num_structs / float(rows)))
-    ls,lb = None,None
-    
-    #figsize(cols * 4, rows * 3)
-    
-    for i, arg in enumerate(args):
-        ax = fig.add_subplot(rows, cols, i+1)
-        try:
-            (ls, lb) = plot_function(arg, ax=ax)
-        except Exception:
-            import traceback
-            print >>sys.stderr, traceback.format_exc()
-            #print >>sys.stderr, "Error:", str(e)
-            continue
-            
-    fig.add_subplot(rows, cols, 1)
-    ax = fig.add_subplot(rows, cols, num_structs)
-    #ls1, lb1 = ax1.get_legend_handles_labels()
-    
-    if label_bottom is not None:
-        fig.text(0.5, 0.00, label_bottom, ha='center', va='center', fontsize=13)
-        
-    if label_left is not None:
-        fig.text(0.00, 0.60, label_left, ha='center', va='center', rotation='vertical', fontsize=13)
-    
-    if label_right is not None:
-        fig.text(1., 0.60, label_right, ha='center', va='center', rotation='vertical', fontsize=13)
-    
-    plt.tight_layout()
-    plt.subplots_adjust(top=1.30)
-    
-    if legend_labels is not None:
-        lb = legend_labels
-    
-    if ls is not None and lb is not None:
-        plt.legend(ls, lb, bbox_to_anchor=legend_pos, loc=2, borderaxespad=0.)
-    
-    if filename is not None:
-        # blah
-        plt.savefig(filename, bbox_inches='tight')
-        
-    return ax
